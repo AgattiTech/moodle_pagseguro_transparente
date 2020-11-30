@@ -158,8 +158,14 @@ function pagseguro_handle_cc_checkout($params, $email, $token){
   }
   
   $array_data = simplexml_load_string($data);
-  
-  
+  $insert = new stdClass();
+  $insert->pagseguro_token = $token;
+  $insert->pagseguro_email = $email;
+  $insert->courseid = $DB->get_field('enrol', 'courseid', ['id' => $instanceid]);
+  $insert->userid = $USER->id;
+  $insert->instanceid = $instanceid;
+  $insert->date = date("Y-m-d");
+ 
 }
 
 function pagseguro_handle_boleto_checkout($params, $email, $token){
