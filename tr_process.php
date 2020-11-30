@@ -1,0 +1,336 @@
+<?php
+
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * Listens for Instant Payment Notification from pagseguro
+ *
+ * This script waits for Payment notification from pagseguro,
+ * then double checks that data by sending it back to pagseguro.
+ * If pagseguro verifies this then it sets up the enrolment for that
+ * user.
+ *
+ * @package    enrol
+ * @subpackage pagseguro
+ * @copyright 2010 Eugene Venter
+ * @copyright  2015 Daniel Neis Araujo <danielneis@gmail.com>
+ * @author     Eugene Venter - based on code by others
+ * @author     Daniel Neis Araujo based on code by Eugene Venter and others
+ * @author     Igor Agatti Lima based on code by Eugene Venter, Daniel Neis Araujo and others
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+ 
+
+require('../../config.php');
+require_once("lib.php");
+require_once($CFG->libdir.'/enrollib.php');
+
+define('COMMERCE_PAGSEGURO_STATUS_AWAITING', 1);
+define('COMMERCE_PAGSEGURO_STATUS_IN_ANALYSIS', 2);
+define('COMMERCE_PAGSEGURO_STATUS_PAID', 3);
+define('COMMERCE_PAGSEGURO_STATUS_AVAILABLE', 4);
+define('COMMERCE_PAGSEGURO_STATUS_DISPUTED', 5);
+define('COMMERCE_PAGSEGURO_STATUS_REFUNDED', 6);
+define('COMMERCE_PAGSEGURO_STATUS_CANCELED', 7);
+define('COMMERCE_PAGSEGURO_STATUS_DEBITED', 8); // Valor devolvido para o comprador.
+define('COMMERCE_PAGSEGURO_STATUS_WITHHELD', 9); // Retenção temporária.
+define('COMMERCE_PAYMENT_STATUS_SUCCESS', 'success');
+define('COMMERCE_PAYMENT_STATUS_FAILURE', 'failure') ;
+define('COMMERCE_PAYMENT_STATUS_PENDING', 'pending');
+
+$plugin = enrol_get_plugin('pagseguro');
+$email = $plugin->get_config('pagsegurobusiness');
+$token = $plugin->get_config('pagsegurotoken');
+
+$notificationCode = optional_param('notificationCode', '', PARAM_RAW);
+$notificationType = optional_param('notificationType', '', PARAM_RAW);
+
+$payment_method = optional_param('pay_method', '', PARAM_RAW);
+$instanceid = $PAGE->course->id;
+$plugin_instance = $DB->get_record("enrol", array("id" => $instanceid, "status" => 0));
+
+if($payment_method == 'cc'){
+	$whole_phone = optional_param('senderphonenumber', '', PARAM_RAW);
+	
+	$params	= [];
+	$params['name'] = optional_param('ccholdername', '', PARAM_RAW);
+	$params['email'] = optional_param('senderemail', '', PARAM_RAW);
+	$params['phone_area'] = substr($whole_phone, 1, 2);
+	$params['phone_number'] = trim(preg_replace("(\D)","",substr($whole_phone, 5)));
+	$params['doc_number'] = preg_replace("(\D)","",optional_param('sendercpfcnpj', '', PARAM_RAW));
+	$params['doc_type'] = strlen($params['doc_number']) == 14 ? 'CNPJ' : 'CPF';
+	$params['currency'] = 'BRL';
+	$params['notification_url'] = new moodle_url('/enrol/pagseguro/tr_process.php');
+	$params['item_id'] = "1-{$USER->id}";
+	$params['item_desc'] = empty($course->fullname) ? 'Curso moodle' : mb_substr($course->fullname, 0, 100);
+	$params['item_amount'] = empty($plugin_instance->cost) ? number_format(1000,2) : number_format($plugin_instance->cost, 2);
+	$params['item_amount'] = str_replace(',', '', $params['item_amount']);
+	$params['item_qty'] = 1;
+	$params['reference'] = json_encode(['instanceid' => $instanceid, 'userid' => $USER->id]);
+	$params['transaction_reference'] = json_encode(['instanceid' => $instanceid, 'userid' => $USER->id]);
+	$params['cc_token'] = optional_param('cc_token', '', PARAM_RAW);
+	$params['cc_installment_quantity'] = optional_param('ccinstallments', '', PARAM_RAW);
+	$params['cc_installment_value'] = str_replace(',','',number_format(1000,2)); // TODO: set hidden field and grab value from there
+	$params['address_street'] = optional_param('billingstreet', '', PARAM_RAW);
+    $params['address_number'] = optional_param('billingnumber', '', PARAM_RAW);
+	$params['address_complement'] = optional_param('billingcomplement', '', PARAM_RAW);
+	$params['address_district'] = optional_param('billingdistrict', '', PARAM_RAW);
+	$params['address_city'] = optional_param('billingcity', '', PARAM_RAW);
+	$params['address_state'] = optional_param('billingstate', '', PARAM_RAW);
+	$params['address_country'] = 'BRA'; //optional_param('billingcountry', '', PARAM_RAW);
+	$params['address_postcode'] = optional_param('billingpostcode', '', PARAM_RAW);
+	
+	pagseguro_handle_cc_checkout($params, $email, $token);
+   
+}
+
+if($payment_method == 'boleto'){
+  $whole_phone = optional_param('senderphonenumber', '', PARAM_RAW);
+  
+  $params	= [];
+  $params['name'] = optional_param('sendername', '', PARAM_RAW);
+  $params['email'] = optional_param('senderemail', '', PARAM_RAW);
+  $params['phone_area'] = substr($whole_phone, 1, 2);
+  $params['phone_number'] = trim(preg_replace("(\D)","",substr($whole_phone, 5)));
+  $params['doc_number'] = preg_replace("(\D)","",optional_param('sendercpfcnpj', '', PARAM_RAW));
+  $params['doc_type'] = strlen($params['doc_number']) == 14 ? 'CNPJ' : 'CPF';
+  $params['currency'] = 'BRL';
+  $params['item_id'] = "{$instanceid}-{$USER->id}";
+  $params['item_desc'] = empty($course->fullname) ? 'Curso moodle' : mb_substr($course->fullname, 0, 100);
+  $params['item_amount'] = empty($plugin_instance->cost) ? number_format(1000,2) : number_format($plugin_instance->cost, 2);
+  $params['item_amount'] = str_replace(',', '', $params['item_amount']);
+  $params['item_qty'] = 1;
+  $params['reference'] = json_encode(['instanceid' => $instanceid, 'userid' => $USER->id]);
+  $params['transaction_reference'] = json_encode(['instanceid' => $instanceid, 'userid' => $USER->id]);
+  
+  $params['plugin_instance'] = $plugin_instance;
+  
+  pagseguro_handle_boleto_checkout($params, $email, $token);
+}
+
+if(!empty($notificationCode) || $notificationType = 'transaction'){
+	
+	pagseguro_handle_notificationRequest($notificationCode, $email, $token);
+}
+
+
+function pagseguro_handle_cc_checkout($params, $email, $token){
+
+  global $CFG, $USER, $DB;
+  
+  $req_xml = pagseguro_build_cc_xml($params);
+	
+  $url = "https://ws.sandbox.pagseguro.uol.com.br/v2/transactions/?email=".$email."&token=".$token;
+  
+  $ch = curl_init();
+  curl_setopt($ch, CURLOPT_HEADER, 0);
+  curl_setopt($ch, CURLOPT_URL, $url);
+  curl_setopt($ch, CURLOPT_HTTPHEADER, array("Content-Type: application/xml; charset=ISO-8859-1"));
+  curl_setopt($ch, CURLOPT_POST, 1);
+ 
+  curl_setopt($ch, CURLOPT_POSTFIELDS, $req_xml );
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+  curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 300);
+  curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+  
+  $data = curl_exec($ch);
+  curl_close($ch);
+  
+  if ($data == 'Unauthorized') {
+    redirect(new moodle_url('/enrol/pagseguro/return.php', array('id' => $courseid, 'error' => 'unauthorized')));
+  }
+  
+  if (count($data->error) > 0) {
+      redirect(new moodle_url('/enrol/pagseguro/return.php', array('id' => $courseid, 'error' => 'generic')));
+  }
+  
+  $array_data = simplexml_load_string($data);
+  
+  
+}
+
+function pagseguro_handle_boleto_checkout($params, $email, $token){
+
+  global $CFG, $USER, $DB;
+	
+  $req_xml = pagseguro_build_boleto_xml($params);
+	
+  $url = "https://ws.sandbox.pagseguro.uol.com.br/v2/transactions/?email=".$email."&token=".$token;
+  
+  $ch = curl_init();
+  curl_setopt($ch, CURLOPT_HEADER, 0);
+  curl_setopt($ch, CURLOPT_URL, $url);
+  curl_setopt($ch, CURLOPT_HTTPHEADER, array("Content-Type: application/xml; charset=ISO-8859-1"));
+  curl_setopt($ch, CURLOPT_POST, 1);
+ 
+  curl_setopt($ch, CURLOPT_POSTFIELDS, $req_xml );
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+  curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 300);
+  curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+  
+  $data = curl_exec($ch);
+  curl_close($ch);
+  
+  if ($data == 'Unauthorized') {
+    redirect(new moodle_url('/enrol/pagseguro/return.php', array('id' => $courseid, 'error' => 'unauthorized')));
+  }
+  
+  if (count($data->error) > 0) {
+    redirect(new moodle_url('/enrol/pagseguro/return.php', array('id' => $courseid, 'error' => 'generic')));
+  }
+  
+  $array_data = simplexml_load_string($data);
+  
+}
+
+function pagseguro_build_boleto_xml($params){
+  return "<? xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"yes\" ?>
+    <payment>
+      <mode>default</mode>
+      <method>boleto</method>
+	  <sender>
+        <name>".$params['name']."</name>
+        <email>".$params['email']."</email>
+        <phone>
+          <areaCode>".$params['phone_area']."</areaCode>
+          <number>".$params['phone_number']."</number>
+    	</phone>
+    	<documents>
+    	  <document>
+    	    <type>".$params['doc_type']."</type>
+    	    <value>".$params['doc_number']."</value>
+		  </document>
+		</documents>
+		<hash>".$params['sender_hash']."</hash>
+      </sender>
+      <currency>".$params['currency']."</currency>
+      <notificationURL>".$params['notification_url']."</notificationURL>
+      <items>
+        <item>
+          <id>".$params['item_id']."</id>
+          <description>".$params['item_desc']."</description>
+          <amount>".$params['item_amount']."</amount>
+          <quantity>".$params['item_qty']."</quantity>
+        </item>
+        <reference>".$params['reference']."</reference>
+      </items>
+      <extraAmount>0.00</extraAmount>
+      <reference>".$params['transaction_reference']."</reference>
+      <shipping>
+        <addressRequired>false</addressRequired>
+      </shipping>
+	</payment>";
+}
+
+function pagseguro_build_cc_xml($params){
+	return "<? xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"yes\" ?>
+    <payment>
+      <mode>default</mode>
+      <method>creditCard</method>
+	  <sender>
+        <name>".$params['name']."</name>
+        <email>".$params['email']."</email>
+        <phone>
+          <areaCode>".$params['phone_area']."</areaCode>
+          <number>".$params['phone_number']."</number>
+    	</phone>
+    	<documents>
+    	  <document>
+    	    <type>".$params['doc_type']."</type>
+    	    <value>".$params['doc_number']."</value>
+		  </document>
+		</documents>
+      </sender>
+      <currency>".$params['currency']."</currency>
+      <notificationURL>".$params['notification_url']."</notificationURL>
+      <items>
+        <item>
+          <id>".$params['item_id']."</id>
+          <description>".$params['item_desc']."</description>
+          <amount>".$params['item_amount']."</amount>
+          <quantity>".$params['item_qty']."</quantity>
+        </item>
+        <reference>".$params['reference']."</reference>
+      </items>
+      <extraAmount>0.00</extraAmount>
+      <reference>".$params['transaction_reference']."</reference>
+      <shipping>
+        <addressRequired>false</addressRequired>
+      </shipping>
+      <creditCard>
+		<token>".$params['cc_token']."</token>
+		<installment>
+		  <quantity>".$params['cc_installment_quantity']."</quantity>
+		  <value>".$params['cc_installment_value']."</value>
+		</installment>
+		<holder>
+		  <name>".$params['name']."</name>
+		  <documents>
+		    <document>
+		      <type>".$params['doc_type']."</type>
+		      <value>".$params['doc_number']."</value>
+		    </document>
+		  </documents>
+		  <birthDate>".$params['birthday']."</birthDate>
+		  <phone>
+		    <areaCode>".$params['phone_area']."</areaCode>
+		    <number>".$params['phone_number']."</number>
+		  </phone>
+		</holder>
+		<billingAddress>
+		  <street>".$params['address_street']."</street>
+		  <number>".$params['address_number']."</number>
+		  <complement>".$params['address_complement']."</complement>
+		  <district>".$params['address_district']."</district>
+		  <city>".$params['address_city']."</city>
+		  <state>".$params['address_state']."</state>
+		  <country>".$params['address_country']."</country>
+		  <postalCode>".$params['address_postcode']."</postalCode>
+		</billingAddress>
+      </creditCard>
+	</payment>";
+}
+
+
+
+function pagseguro_handle_notificationRequest($notificationCode, $email, $token){
+  
+  $url = "https://ws.sandbox.pagseguro.uol.com.br/v3/transactions/notifications/$notificationCode?email=$email&token=$token";
+  
+  $ch = curl_init($url);
+  curl_setopt($ch, CURLOPT_HEADER, 0);
+  curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
+  
+  $data = curl_exec($ch);
+  curl_close($ch);
+  
+  $transaction = simplexml_load_string($data);
+  
+  pagseguro_transparent_handleTransaction($transaction);
+	
+}
+
+function pagseguro_transparent_handleTransaction($transaction){
+	global $CFG, $USER, $DB;
+	
+	$plugin = enrol_get_plugin('pagseguro');
+	
+	
+}
+
+		
+		
+	
