@@ -59,13 +59,21 @@ $notificationCode = optional_param('notificationCode', '', PARAM_RAW);
 $notificationType = optional_param('notificationType', '', PARAM_RAW);
 
 $payment_method = optional_param('pay_method', '', PARAM_RAW);
-$instanceid = $PAGE->course->id;
-$plugin_instance = $DB->get_record("enrol", array("id" => $instanceid, "status" => 0));
 
 if($payment_method == 'cc'){
+
+	$courseid = optional_param('courseid', '0', PARAM_INT);
+	$plugin_instance = $DB->get_record('enrol', array('courseid' => $courseid, 'enrol' => 'pagseguro'));
+	
 	$whole_phone = optional_param('senderphonenumber', '', PARAM_RAW);
 	
 	$params	= [];
+	
+	$params['courseid'] = $courseid;
+	$params['instanceid'] = $plugin_instance->id;
+	
+	$refid = pagseguro_insert_order($params, $email, $token);
+	
 	$params['name'] = optional_param('ccholdername', '', PARAM_RAW);
 	$params['email'] = optional_param('senderemail', '', PARAM_RAW);
 	$params['phone_area'] = substr($whole_phone, 1, 2);
@@ -74,16 +82,14 @@ if($payment_method == 'cc'){
 	$params['doc_type'] = strlen($params['doc_number']) == 14 ? 'CNPJ' : 'CPF';
 	$params['currency'] = 'BRL';
 	$params['notification_url'] = new moodle_url('/enrol/pagseguro/tr_process.php');
-	$params['item_id'] = "1-{$USER->id}";
 	$params['item_desc'] = empty($course->fullname) ? 'Curso moodle' : mb_substr($course->fullname, 0, 100);
 	$params['item_amount'] = empty($plugin_instance->cost) ? number_format(1000,2) : number_format($plugin_instance->cost, 2);
 	$params['item_amount'] = str_replace(',', '', $params['item_amount']);
 	$params['item_qty'] = 1;
-	$params['reference'] = json_encode(['instanceid' => $instanceid, 'userid' => $USER->id]);
-	$params['transaction_reference'] = json_encode(['instanceid' => $instanceid, 'userid' => $USER->id]);
+	$params['reference'] = $refid;
 	$params['cc_token'] = optional_param('cc_token', '', PARAM_RAW);
 	$params['cc_installment_quantity'] = optional_param('ccinstallments', '', PARAM_RAW);
-	$params['cc_installment_value'] = str_replace(',','',number_format(1000,2)); // TODO: set hidden field and grab value from there
+	$params['cc_installment_value'] = str_replace(',','',number_format(100,2)); // TODO: set hidden field and grab value from there
 	$params['address_street'] = optional_param('billingstreet', '', PARAM_RAW);
     $params['address_number'] = optional_param('billingnumber', '', PARAM_RAW);
 	$params['address_complement'] = optional_param('billingcomplement', '', PARAM_RAW);
@@ -98,9 +104,19 @@ if($payment_method == 'cc'){
 }
 
 if($payment_method == 'boleto'){
+  
+  $courseid = optional_param('courseid', '0', PARAM_INT);
+  $plugin_instance = $DB->get_record('enrol', array('courseid' => $courseid, 'enrol' => 'pagseguro'));
+
   $whole_phone = optional_param('senderphonenumber', '', PARAM_RAW);
   
   $params	= [];
+  $params['courseid'] = $courseid;
+  $params['instanceid'] = $plugin_instance->id;
+  
+  $refid = pagseguro_insert_order($params, $email, $token);
+  
+  
   $params['name'] = optional_param('sendername', '', PARAM_RAW);
   $params['email'] = optional_param('senderemail', '', PARAM_RAW);
   $params['phone_area'] = substr($whole_phone, 1, 2);
@@ -108,22 +124,37 @@ if($payment_method == 'boleto'){
   $params['doc_number'] = preg_replace("(\D)","",optional_param('sendercpfcnpj', '', PARAM_RAW));
   $params['doc_type'] = strlen($params['doc_number']) == 14 ? 'CNPJ' : 'CPF';
   $params['currency'] = 'BRL';
-  $params['item_id'] = "{$instanceid}-{$USER->id}";
+  $params['notification_url'] = new moodle_url('/enrol/pagseguro/tr_process.php');
   $params['item_desc'] = empty($course->fullname) ? 'Curso moodle' : mb_substr($course->fullname, 0, 100);
   $params['item_amount'] = empty($plugin_instance->cost) ? number_format(1000,2) : number_format($plugin_instance->cost, 2);
   $params['item_amount'] = str_replace(',', '', $params['item_amount']);
   $params['item_qty'] = 1;
-  $params['reference'] = json_encode(['instanceid' => $instanceid, 'userid' => $USER->id]);
-  $params['transaction_reference'] = json_encode(['instanceid' => $instanceid, 'userid' => $USER->id]);
+  $params['reference'] = $refid;
+  
+  $params['sender_hash'] = optional_param('sender_hash', '', PARAM_RAW);
   
   $params['plugin_instance'] = $plugin_instance;
   
   pagseguro_handle_boleto_checkout($params, $email, $token);
 }
 
-if(!empty($notificationCode) || $notificationType = 'transaction'){
-	
+if(!empty($notificationCode) && $notificationType == 'transaction'){
+		
 	pagseguro_handle_notificationRequest($notificationCode, $email, $token);
+}
+
+function pagseguro_insert_order($params, $email, $token){
+  global $USER, $DB;
+
+  $rec = new stdClass();
+  $rec->pagseguro_token = $token;
+  $rec->pagseguro_email = $email;
+  $rec->courseid = $params['courseid'];
+  $rec->userid = $USER->id;
+  $rec->instanceid = $params['instanceid'];
+  $rec->date = date("Y-m-d");
+  
+  return $DB->insert_record("enrol_pagseguro", $rec);
 }
 
 
@@ -132,8 +163,10 @@ function pagseguro_handle_cc_checkout($params, $email, $token){
   global $CFG, $USER, $DB;
   
   $req_xml = pagseguro_build_cc_xml($params);
+  
+  //var_dump($req_xml);
 	
-  $url = "https://ws.sandbox.pagseguro.uol.com.br/v2/transactions/?email=".$email."&token=".$token;
+  $url = "https://ws.sandbox.pagseguro.uol.com.br/v2/transactions?email=".$email."&token=".$token;
   
   $ch = curl_init();
   curl_setopt($ch, CURLOPT_HEADER, 0);
@@ -158,48 +191,71 @@ function pagseguro_handle_cc_checkout($params, $email, $token){
   }
   
   $array_data = simplexml_load_string($data);
-  $insert = new stdClass();
-  $insert->pagseguro_token = $token;
-  $insert->pagseguro_email = $email;
-  $insert->courseid = $DB->get_field('enrol', 'courseid', ['id' => $instanceid]);
-  $insert->userid = $USER->id;
-  $insert->instanceid = $instanceid;
-  $insert->date = date("Y-m-d");
+  var_dump($array_data);
+  
+  pagseguro_handle_transaction_response($array_data);
+  
+  //$DB->update_record("enrol_pagseguro", $data);
+  
  
 }
 
-function pagseguro_handle_boleto_checkout($params, $email, $token){
-
+function pagseguro_handle_boleto_checkout($params, $email, $token){ 
   global $CFG, $USER, $DB;
-	
-  $req_xml = pagseguro_build_boleto_xml($params);
-	
-  $url = "https://ws.sandbox.pagseguro.uol.com.br/v2/transactions/?email=".$email."&token=".$token;
   
+  $req_xml = pagseguro_build_boleto_xml($params);
+
+  $url = "https://ws.sandbox.pagseguro.uol.com.br/v2/transactions?email=".$email."&token=".$token;
+
   $ch = curl_init();
   curl_setopt($ch, CURLOPT_HEADER, 0);
   curl_setopt($ch, CURLOPT_URL, $url);
   curl_setopt($ch, CURLOPT_HTTPHEADER, array("Content-Type: application/xml; charset=ISO-8859-1"));
   curl_setopt($ch, CURLOPT_POST, 1);
- 
+
   curl_setopt($ch, CURLOPT_POSTFIELDS, $req_xml );
   curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
   curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 300);
   curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-  
+
   $data = curl_exec($ch);
   curl_close($ch);
-  
+
   if ($data == 'Unauthorized') {
-    redirect(new moodle_url('/enrol/pagseguro/return.php', array('id' => $courseid, 'error' => 'unauthorized')));
+    redirect(new moodle_url('/enrol/pagseguro/return.php', array('id' => $params['courseid'], 'error' => 'unauthorized')));
   }
-  
+
   if (count($data->error) > 0) {
-    redirect(new moodle_url('/enrol/pagseguro/return.php', array('id' => $courseid, 'error' => 'generic')));
+    redirect(new moodle_url('/enrol/pagseguro/return.php', array('id' => $params['courseid'], 'error' => 'generic')));
   }
-  
+
   $array_data = simplexml_load_string($data);
+  var_dump($array_data);
   
+  //pagseguro_handle_transaction_response($array_data);
+  
+  
+  
+}
+
+function pagseguro_handle_transaction_response($data) {
+	
+	global $DB;		
+		
+	$rec = new stdClass();
+	$rec->id = $data->reference->__toString();
+	$rec->code = $data->code->__toString();
+	$rec->type = $data->type->__toString();
+	$rec->status = $data->status->__toString();
+	$rec->paymentmethod_type = $data->paymentMethod->type->__toString();
+	$rec->paymentmethod_code = $data->paymentMethod->code->__toString();
+	$rec->grossamount = number_format($data->grossAmount->__toString(),2);
+	$rec->discountedamount = $data->discountAmount->__toString();
+	$rec->paymentstatus = COMMERCE_PAYMENT_STATUS_PENDING;
+	
+	$DB->update_record("enrol_pagseguro", $rec);
+	
+	
 }
 
 function pagseguro_build_boleto_xml($params){
@@ -226,15 +282,14 @@ function pagseguro_build_boleto_xml($params){
       <notificationURL>".$params['notification_url']."</notificationURL>
       <items>
         <item>
-          <id>".$params['item_id']."</id>
+          <id>".$params['courseid']."</id>
           <description>".$params['item_desc']."</description>
           <amount>".$params['item_amount']."</amount>
           <quantity>".$params['item_qty']."</quantity>
         </item>
-        <reference>".$params['reference']."</reference>
       </items>
       <extraAmount>0.00</extraAmount>
-      <reference>".$params['transaction_reference']."</reference>
+      <reference>".$params['reference']."</reference>
       <shipping>
         <addressRequired>false</addressRequired>
       </shipping>
@@ -264,15 +319,14 @@ function pagseguro_build_cc_xml($params){
       <notificationURL>".$params['notification_url']."</notificationURL>
       <items>
         <item>
-          <id>".$params['item_id']."</id>
+          <id>".$params['courseid']."</id>
           <description>".$params['item_desc']."</description>
           <amount>".$params['item_amount']."</amount>
           <quantity>".$params['item_qty']."</quantity>
         </item>
-        <reference>".$params['reference']."</reference>
       </items>
       <extraAmount>0.00</extraAmount>
-      <reference>".$params['transaction_reference']."</reference>
+      <reference>".$params['reference']."</reference>
       <shipping>
         <addressRequired>false</addressRequired>
       </shipping>
@@ -314,7 +368,7 @@ function pagseguro_build_cc_xml($params){
 
 function pagseguro_handle_notificationRequest($notificationCode, $email, $token){
   
-  $url = "https://ws.sandbox.pagseguro.uol.com.br/v3/transactions/notifications/$notificationCode?email=$email&token=$token";
+  $url = "https://ws.sandbox.pagseguro.uol.com.br/v3/transactions/notifications/{$notificationCode}?email={$email}&token={$token}";
   
   $ch = curl_init($url);
   curl_setopt($ch, CURLOPT_HEADER, 0);
@@ -323,9 +377,9 @@ function pagseguro_handle_notificationRequest($notificationCode, $email, $token)
   $data = curl_exec($ch);
   curl_close($ch);
   
-  $transaction = simplexml_load_string($data);
+  //$transaction = simplexml_load_string($data);
   
-  pagseguro_transparent_handleTransaction($transaction);
+  //pagseguro_transparent_handleTransaction($transaction);
 	
 }
 

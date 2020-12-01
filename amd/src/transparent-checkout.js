@@ -24,6 +24,7 @@
  */
 
 var brandName = '';
+var ghash = '';
 
 function loadDoc(courseid, p){
   require(['core/ajax'], function(ajax) {
@@ -59,6 +60,7 @@ function setPagueSeguroWSSessionId(sessionId,courseId, courseP){
               return false;
             }
             var hash = response.senderHash; //Hash estará disponível nesta variável.
+            ghash = hash;
             createMasks();
           });
         }).fail(notification.exception);
@@ -227,10 +229,10 @@ function paycc(){
         success: function(response) {
           //console.log(response.card.token);
           if(ccValidateFields()){
-            $("input[name=cc_token]").val(response.card.token); 
-            $("#pagseguro_cc_form").submit();
+            $("input[name=cc_token]").val(response.card.token);
             var urlParams = new URLSearchParams(window.location.search);
-            $("input[name=instanceid]").val(urlParams.get('id'));
+        	$("input[name=courseid]").val(urlParams.get('id'));
+            $("#pagseguro_cc_form").submit();
           }
         },
         error: function() {
@@ -247,35 +249,10 @@ function paycc(){
 
 function payboleto(){
   if(boletoValidateFields()){
-    require(['jquery'], function($){
-      var ccNum = $("input[name=sender_hash]").val().replace(/\s/g, '');
-      var ccCvv = $("input[name=cvv]").val();
-      var ccExp = $("input[name=ccvalid]").val().split("/");
-      
-      PagSeguroDirectPayment.createCardToken({
-        cardNumber: ccNum, // Número do cartão de crédito
-        brand: brandName, // Bandeira do cartão
-        cvv: ccCvv, // CVV do cartão
-        expirationMonth: ccExp[0], // Mês da expiração do cartão
-        expirationYear: ccExp[1], // Ano da expiração do cartão, é necessário os 4 dígitos.
-        success: function(response) {
-          //console.log(response.card.token);
-          if(boletoValidateFields()){
-            $("input[name=sender_hash]").val(hash); 
-            $("#pagseguro_boleto_form").submit();
-            var urlParams = new URLSearchParams(window.location.search);
-            $("input[name=instanceid]").val(urlParams.get('id'));
-          }
-        },
-        error: function() {
-          // Callback para chamadas que falharam.
-          // console.log(response);
-        },
-        complete: function() {
-          // Callback para todas chamadas.
-        }
-      });
-    });
+    $("#pagseguro_boleto_form input[name=sender_hash]").val(ghash);
+    var urlParams = new URLSearchParams(window.location.search);
+    $("#pagseguro_boleto_form input[name=courseid]").val(urlParams.get('id'));
+    $("#pagseguro_boleto_form").submit();
   }
 }
 

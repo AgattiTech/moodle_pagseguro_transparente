@@ -52,11 +52,11 @@ class checkout_form implements renderable, templatable {
      */
     public function export_for_template(renderer_base $output) {
 //        $data = \core_webservice_external::get_site_info();
-		global $USER;
-		global $COURSE;
+		global $USER, $COURSE, $PAGE;
 		
 		
 		$data = array();
+		$data["courseid"] = $PAGE->course->id;
 		$data["email"] = $USER->email;
 		$data["fullname"] = $USER->firstname." ".$USER->lastname;
 		if($USER->cpf){
