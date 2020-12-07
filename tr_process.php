@@ -248,7 +248,7 @@ function pagseguro_transparent_sendPaymentDetails($xml, $url){
 }
 
 function pagseguro_transparent_insertOrder($params, $email, $token){
-  global $DB;
+  global $USER, $DB;
 
   $rec = new stdClass();
   $rec->pagseguro_token = $token;
@@ -264,7 +264,7 @@ function pagseguro_transparent_insertOrder($params, $email, $token){
 }
 
 function pagseguro_transparent_updateOrder($params, $email, $token){
-  global $DB;
+  global $USER, $DB;
 
   $rec = new stdClass();
   $rec->pagseguro_token = $token;
@@ -287,11 +287,11 @@ function pagseguro_transparent_handleTransactionResponse($data) {
 	$rec->id = $data->reference->__toString();
 	$rec->code = $data->code->__toString();
 	$rec->type = $data->type->__toString();
-	$rec->status = intval($transaction->status->__toString());
+	$rec->status = intval($data->status->__toString());
 	$rec->paymentmethod_type = $data->paymentMethod->type->__toString();
 	$rec->paymentmethod_code = $data->paymentMethod->code->__toString();
-	$rec->grossamount = number_format($transaction->grossAmount->__toString(),2);
-	$rec->discountedamount = $transaction->discountAmount->__toString();
+	$rec->grossamount = number_format($data->grossAmount->__toString(),2);
+	$rec->discountedamount = $data->discountAmount->__toString();
 	
 	switch($rec->status){
 		case COMMERCE_PAGSEGURO_STATUS_AWAITING:
