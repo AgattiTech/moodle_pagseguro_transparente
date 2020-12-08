@@ -85,7 +85,7 @@ if($payment_method == 'cc'){
 	$params['currency'] = 'BRL';
 	$params['notification_url'] = new moodle_url('/enrol/pagseguro/tr_process.php');
 	$params['item_desc'] = empty($course->fullname) ? 'Curso moodle' : mb_substr($course->fullname, 0, 100);
-	$params['item_amount'] = empty($plugin_instance->cost) ? number_format(1000,2) : number_format($plugin_instance->cost, 2);
+	$params['item_amount'] = number_format($plugin_instance->cost, 2);
 	$params['item_amount'] = str_replace(',', '', $params['item_amount']);
 	$params['item_qty'] = 1;
 	$params['cc_token'] = optional_param('cc_token', '', PARAM_RAW);
@@ -127,14 +127,12 @@ if($payment_method == 'boleto'){
   $params['currency'] = 'BRL';
   $params['notification_url'] = new moodle_url('/enrol/pagseguro/tr_process.php');
   $params['item_desc'] = empty($course->fullname) ? 'Curso moodle' : mb_substr($course->fullname, 0, 100);
-  $params['item_amount'] = empty($plugin_instance->cost) ? number_format(1000,2) : number_format($plugin_instance->cost, 2);
+  $params['item_amount'] = number_format($plugin_instance->cost, 2);
   $params['item_amount'] = str_replace(',', '', $params['item_amount']);
   $params['item_qty'] = 1;
-  
   $params['sender_hash'] = optional_param('sender_hash', '', PARAM_RAW);
-  
   $params['plugin_instance'] = $plugin_instance;
-  
+
   pagseguro_transparent_boletoCheckout($params, $email, $token);
 }
 
@@ -142,6 +140,15 @@ if(!empty($notificationCode) && $notificationType == 'transaction'){
 	pagseguro_transparent_notificationRequest($notificationCode, $email, $token);
 }
 
+/**
+ * Controller function of the credit card checkout
+ *
+ * parameters:
+ * $params: array of information about the order, gathered from the form
+ * $email: string with Pagseguro seller email
+ * $token: string with Pagseguro seller token
+ * 
+ */
 function pagseguro_transparent_ccCheckout($params, $email, $token){
     
   // Insert into database the order (so there aren't any lost customers)
@@ -174,6 +181,15 @@ function pagseguro_transparent_ccCheckout($params, $email, $token){
  
 }
 
+/**
+ * Controller function of the boleto checkout
+ *
+ * parameters:
+ * $params: array of information about the order, gathered from the form
+ * $email: string with Pagseguro seller email
+ * $token: string with Pagseguro seller token
+ * 
+ */
 function pagseguro_transparent_boletoCheckout($params, $email, $token){ 
     
   // Insert into database the order (so there aren't any lost customers)
@@ -206,6 +222,15 @@ function pagseguro_transparent_boletoCheckout($params, $email, $token){
   
 }
 
+/**
+ * Controller function of the notification receiver
+ *
+ * parameters:
+ * $notificationCode: string with the notification code sent by Pagseguro
+ * $email: string with Pagseguro seller email
+ * $token: string with Pagseguro seller token
+ * 
+ */
 function pagseguro_transparent_notificationRequest($notificationCode, $email, $token){
   
   $url = "https://ws.sandbox.pagseguro.uol.com.br/v3/transactions/notifications/{$notificationCode}?email={$email}&token={$token}";
@@ -227,6 +252,17 @@ function pagseguro_transparent_notificationRequest($notificationCode, $email, $t
 	
 }
 
+/**
+ * pagseguro_transparent_sendPaymentDetails
+ * Sends payment details with an XML string to a URL using the curl request system.
+ *
+ * parameters:
+ * $xml: string with the XML file to be sent to URL
+ * $url: string with the URL
+ * 
+ * return:
+ * response from the curl request
+ */
 function pagseguro_transparent_sendPaymentDetails($xml, $url){
 
   $ch = curl_init();
@@ -247,6 +283,18 @@ function pagseguro_transparent_sendPaymentDetails($xml, $url){
   
 }
 
+/**
+ * pagseguro_transparent_insertOrder
+ * Inserts preliminary order information into enrol_pagseguro table.
+ *
+ * parameters:
+ * $params: array of information about the order, gathered from the form
+ * $email: string with Pagseguro seller email
+ * $token: string with Pagseguro seller token
+ *
+ * return:
+ * ID of the record inserted
+ */
 function pagseguro_transparent_insertOrder($params, $email, $token){
   global $USER, $DB;
 
@@ -263,10 +311,23 @@ function pagseguro_transparent_insertOrder($params, $email, $token){
   
 }
 
+/**
+ * pagseguro_transparent_insertOrder
+ * Inserts preliminary order information into enrol_pagseguro table.
+ *
+ * parameters:
+ * $params: array of information about the order, gathered from the form
+ * $email: string with Pagseguro seller email
+ * $token: string with Pagseguro seller token
+ *
+ * return:
+ * response from the curl request
+ */
 function pagseguro_transparent_updateOrder($params, $email, $token){
   global $USER, $DB;
 
   $rec = new stdClass();
+  $rec->id = $params['reference'];
   $rec->pagseguro_token = $token;
   $rec->pagseguro_email = $email;
   $rec->courseid = $params['courseid'];
