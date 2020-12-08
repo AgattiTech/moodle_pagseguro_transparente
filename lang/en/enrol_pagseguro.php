@@ -15,11 +15,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Strings for component 'enrol_pagseguro', language 'en', branch 'MOODLE_20_STABLE'
+ * Strings for component 'enrol_pagseguro', language 'en'.
  *
- * @package    enrol
- * @subpackage pagseguro
- * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
+ * @package    enrol_pagseguro
+ * @copyright  2020 Daniel Neis Araujo <danielneis@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -47,6 +46,8 @@ $string['enrolstartdate'] = 'Start date';
 $string['enrolstartdate_help'] = 'If enabled, users can be enrolled from this date onward only.';
 $string['error:unauthorized'] = 'This host is not authorized to use PagSeguro API.';
 $string['mailadmins'] = 'Notify admin';
+$string['mailfromsupport'] = 'Send emails from support';
+$string['mailfromsupport_desc'] = 'If checked, the support email will be used as sender, otherwise the teacher\'s email will be used.';
 $string['mailstudents'] = 'Notify students';
 $string['mailteachers'] = 'Notify teachers';
 $string['messageprovider:pagseguro_enrolment'] = 'PagSeguro enrolment messages';
@@ -66,5 +67,5 @@ $string['status_desc'] = 'Allow users to use PagSeguro to enrol into a course by
 $string['unenrolselfconfirm'] = 'Do you really want to unenrol yourself from course "{$a}"?';
 $string['transparentcheckout'] = 'Transparent Checkout';
 $string['usesandbox'] = 'Use Sandbox';
-
-
+$string['usesandbox'] = 'Use sandbox';
+$string['usesandboxdesc'] = 'Check this if you want to use a sandbox account (requests will be sent to sandbox.pagseguro.uol.com.br test site instead of the production site)';
