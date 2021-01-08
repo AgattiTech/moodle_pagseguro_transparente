@@ -41,6 +41,8 @@
 // Please do not forget to use upgrade_set_timeout()
 // before any action that may take longer time to finish.
 
+defined('MOODLE_INTERNAL') || die;
+
 function xmldb_enrol_pagseguro_upgrade($oldversion) {
     return true;
 }
