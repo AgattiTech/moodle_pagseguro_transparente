@@ -25,7 +25,6 @@
 
 var brandName = '';
 var ghash = '';
-var inst_val = '';
 
 function loadDoc(courseid, p){
     require(['core/ajax'], function(ajax) {
