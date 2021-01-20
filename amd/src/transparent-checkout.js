@@ -26,6 +26,18 @@
 var brandName = '';
 var ghash = '';
 
+require(['jquery'], function($){
+    $(document).on('submit', '#pagseguro_boleto_form', function(e) {
+        if(boletoValidateFields()){
+            $("#pagseguro_boleto_form input[name=sender_hash]").val(ghash);
+            var urlParams = new URLSearchParams(window.location.search);
+            $("#boleto_courseid").val(urlParams.get('id'));
+        } else {
+            e.preventDefault();
+        }
+    });
+});
+
 function loadDoc(courseid, p){
     require(['core/ajax'], function(ajax) {
         var promises = ajax.call([{
@@ -245,15 +257,23 @@ function paycc(){
     }
 }
 
-function payboleto(){
-    if(boletoValidateFields()){
-        require(['jquery'], function($){
-            $("#pagseguro_boleto_form input[name=sender_hash]").val(ghash);
-            var urlParams = new URLSearchParams(window.location.search);
-            $("#pagseguro_boleto_form input[name=courseid]").val(urlParams.get('id'));
-            $("#pagseguro_boleto_form").submit();
-        });
-    }
+function payboleto(e){
+//    require(['jquery'], function($){
+//       $("#pagseguro_boleto_form").submit(function(e) {
+//           e.preventDefault();
+//           console.log("submit prevented");
+//                $("#pagseguro_boleto_form input[name=sender_hash]").val(ghash);
+//                var urlParams = new URLSearchParams(window.location.search);
+//                $("#boleto_courseid").val(urlParams.get('id'));
+//        });
+//    });
+//    } else {
+//        require(['jquery'], function($){
+//            $("#pagseguro_boleto_form").on('submit', function(e){
+//                e.preventDefault();
+//            });
+//        });
+//    }
 }
 
 function ccValidateFields(){

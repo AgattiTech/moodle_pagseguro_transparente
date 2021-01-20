@@ -199,11 +199,11 @@
 			</div>
 			<hr />
 			<div class="form-group row">
-				<button class="btn btn-primary" onclick="payboleto()">Pagar</button>
+				<button class="btn btn-primary" type="submit" onclick="payboleto()" >Pagar</button>
 			</div>
 			<input type="hidden" name="pay_method" value="boleto">
 			<input type="hidden" name="sender_hash" value="">
-			<input type="hidden" name="courseid" value="">
+			<input id="boleto_courseid" type="hidden" name="courseid" value="">
 		</form>
 	</div>
 </div>

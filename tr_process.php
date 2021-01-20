@@ -36,7 +36,7 @@ require('../../config.php');
 require_once("lib.php");
 require_once($CFG->libdir.'/enrollib.php');
 
-require_login();
+admin_externalpage_setup();
 
 header("access-control-allow-origin: https://sandbox.pagseguro.uol.com.br");
 
@@ -230,7 +230,7 @@ function pagseguro_transparent_boletocheckout($params, $email, $token, $baseurl)
 
 /**
  * Controller function of the notification receiver
- * 
+ *
  * @param string $notificationcode the notification code sent by Pagseguro
  * @param string $email Pagseguro seller email
  * @param string $token Pagseguro seller token
@@ -253,7 +253,7 @@ function pagseguro_transparent_notificationrequest($notificationcode, $email, $t
 
     $transaction = simplexml_load_string($data);
 
-    $rec = pagseguro_transparent_handletransactionresponse($transaction, $data);
+    $rec = pagseguro_transparent_handletransactionresponse($transaction);
 
     pagseguro_transparent_handleenrolment($rec);
 
@@ -367,7 +367,6 @@ function pagseguro_transparent_handletransactionresponse($data) {
         case COMMERCE_PAGSEGURO_STATUS_PAID:
         case COMMERCE_PAGSEGURO_STATUS_AVAILABLE:
             $rec->payment_status = COMMERCE_PAYMENT_STATUS_SUCCESS;
-            // TODO: event of receiving payment.
             break;
         case COMMERCE_PAGSEGURO_STATUS_DISPUTED:
         case COMMERCE_PAGSEGURO_STATUS_REFUNDED:
@@ -381,8 +380,35 @@ function pagseguro_transparent_handletransactionresponse($data) {
 
     $DB->update_record("enrol_pagseguro", $rec);
 
-    return $DB->get_record("enrol_pagseguro", ['id' => $rec->id]);
+    $record = $DB->get_record("enrol_pagseguro", ['id' => $rec->id]);
+    if ($record->payment_status == COMMERCE_PAYMENT_STATUS_SUCCESS) {
+        enrol_pagseguro_coursepaidevent($record);
+    }
 
+    return $record;
+
+}
+
+/**
+ * Triggers payment received event.
+ *
+ * @param stdClass $rec (the record in the database for which the payment was received)
+ *
+ * @return void
+ */
+function enrol_pagseguro_coursepaidevent($rec) {
+
+    $context = context_course::instance($rec->courseid);
+
+    $data = (array) $rec;
+
+    $param = array(
+        'context' => $context,
+        'other' => $data,
+    );
+
+    $event = \enrol_pagseguro\event\payment_receive::create($param);
+    $event->trigger();
 }
 
 
