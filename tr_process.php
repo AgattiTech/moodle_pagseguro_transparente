@@ -31,12 +31,10 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-
+// @codingStandardsIgnoreLine
 require('../../config.php');
 require_once("lib.php");
 require_once($CFG->libdir.'/enrollib.php');
-
-admin_externalpage_setup();
 
 header("access-control-allow-origin: https://sandbox.pagseguro.uol.com.br");
 
