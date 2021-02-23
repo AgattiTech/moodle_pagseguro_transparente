@@ -61,10 +61,12 @@ class checkout_form implements renderable, templatable {
      * @return stdClass $dataobj
      */
     public function export_for_template(renderer_base $output) {
-        global $USER, $COURSE, $PAGE;
+        global $USER, $COURSE, $PAGE, $DB;
 
         $data = array();
-        $data["courseid"] = $PAGE->course->id;
+        
+        $data["courseid"] = $this->formparams['courseId'];
+        $course_enrol = $DB->get_record("enrol", array('enrol' => 'pagseguro', 'courseid' => $this->formparams['courseId'] ));
         $data["email"] = $USER->email;
         $data["fullname"] = $USER->firstname." ".$USER->lastname;
         if ($USER->cpf) {
@@ -74,9 +76,7 @@ class checkout_form implements renderable, templatable {
             $data["phone"] = $USER->phone;
         }
         $data["dt"] = userdate(time()) . ' ' . rand();
-        if ($this->formparams['courseP']) {
-            $data["price"] = $this->formparams['courseP'];
-        }
+        $data["cost"] = $course_enrol->cost;
         $dataobj = json_encode($data);
         return $dataobj;
     }

@@ -40,18 +40,15 @@ class enrol_pagseguro_external extends external_api {
      * @return external_function_parameters
      */
     public static function get_session_parameters() {
-        return new external_function_parameters(
-            array( 'courseP' => new external_value(PARAM_FLOAT, 'Price of course that is being bought') )
-        );
+        return new external_function_parameters(array());
     }
 
     /**
      * Connects to pagseguro webservice and retrieves session token.
      *
-     * @param string $courseprice
      * @return string $sessionToken
      */
-    public static function get_session($courseprice) {
+    public static function get_session() {
         global $USER;
 
         $psemail = get_config('enrol_pagseguro', 'pagsegurobusiness');
@@ -61,12 +58,6 @@ class enrol_pagseguro_external extends external_api {
         } else {
             $baseurl = 'https://ws.pagseguro.uol.com.br/v2/sessions?email=';
         }
-
-        $params = self::validate_parameters(self::get_session_parameters(),
-            array(
-                'courseP' => $courseprice
-            )
-        );
 
         $url = $baseurl . urlencode($psemail) . '&token=' . $pstoken;
 
@@ -80,7 +71,6 @@ class enrol_pagseguro_external extends external_api {
         $rtn = array();
 
         $rtn['stoken'] = $resultxml->id->__toString();
-        $rtn['courseP'] = $courseprice;
 
         return $rtn;
     }
@@ -91,10 +81,11 @@ class enrol_pagseguro_external extends external_api {
      *
      */
     public static function get_session_returns() {
+//        $result = new external_value(PARAM_TEXT, 'PagSeguro Session Token');
+//        return $result;
         return new external_single_structure(
             array(
                 'stoken' => new external_value(PARAM_TEXT, 'PagSeguro Session Token'),
-                'courseP' => new external_value(PARAM_TEXT, 'Price of course that is being bought')
             )
         );
     }
@@ -108,7 +99,6 @@ class enrol_pagseguro_external extends external_api {
             array(
                 'sessionId' => new external_value(PARAM_TEXT, 'Session ID from Pagseguro'),
                 'courseId' => new external_value(PARAM_TEXT, 'Course ID that is being bought'),
-                'courseP' => new external_value(PARAM_TEXT, 'Price of course that is being bought')
             )
         );
     }
@@ -119,17 +109,15 @@ class enrol_pagseguro_external extends external_api {
      *
      * @param string $sessionid
      * @param string $courseid
-     * @param string $courseprice
      * @return string $sessionToken
      */
-    public static function get_forms($sessionid, $courseid, $courseprice) {
+    public static function get_forms($sessionid, $courseid) {
         global $PAGE;
 
         $params = self::validate_parameters(self::get_forms_parameters(),
             array(
                 'sessionId' => $sessionid,
                 'courseId' => $courseid,
-                'courseP' => $courseprice
             )
         );
 

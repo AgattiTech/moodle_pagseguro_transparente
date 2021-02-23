@@ -104,21 +104,24 @@ require(['jquery'], function($){
     });
 });
 
-function loadDoc(courseid, p){
+function loadDoc(){
     require(['core/ajax'], function(ajax) {
         var promises = ajax.call([{
             methodname: 'enrol_pagseguro_get_session',
-            args:{'courseP': p }
+            args: {}
         }]);
         promises[0].done(function(response) {
-            setPagueSeguroWSSessionId(response.stoken,courseid, response.courseP);
+            console.log("response stoken:" + response.stoken);
+            console.log("full response:" + response);
+            var urlParams = new URLSearchParams(window.location.search);
+            setPagueSeguroWSSessionId(response.stoken, urlParams.get('id'));
         }).fail(function() {
             // Do something with the exception.
         });
     });
 }
 
-function setPagueSeguroWSSessionId(sessionId,courseId, courseP){
+function setPagueSeguroWSSessionId(sessionId,courseId){
     PagSeguroDirectPayment.setSessionId(sessionId);
     PagSeguroDirectPayment.getPaymentMethods({
         success: function() {
@@ -127,7 +130,7 @@ function setPagueSeguroWSSessionId(sessionId,courseId, courseP){
             function($, ajax, templates, notification) {
                 var promises = ajax.call([{
                     methodname: 'enrol_pagseguro_get_forms',
-                    args:{ 'sessionId' : sessionId, 'courseId': courseId, 'courseP': courseP }
+                    args:{ 'sessionId' : sessionId, 'courseId': courseId }
                 }]);
                 promises[0].done(function(response) {
                     templates.render('enrol_pagseguro/checkout_form', JSON.parse(response)).done(function(html, js) {
