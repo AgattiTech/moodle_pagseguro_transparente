@@ -65,6 +65,8 @@ class checkout_form implements renderable, templatable {
 
         $data = array();
         
+        //TODO: treat couponcode here and return with discounted code ;)
+        
         $data["courseid"] = $this->formparams['courseId'];
         $course_enrol = $DB->get_record("enrol", array('enrol' => 'pagseguro', 'courseid' => $this->formparams['courseId'] ));
         $data["email"] = $USER->email;

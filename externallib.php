@@ -40,7 +40,9 @@ class enrol_pagseguro_external extends external_api {
      * @return external_function_parameters
      */
     public static function get_session_parameters() {
-        return new external_function_parameters(array());
+        return new external_function_parameters(array(
+            'couponcode' => new external_value(PARAM_TEXT, 'Discount Coupon Code'),
+        ));
     }
 
     /**
@@ -48,8 +50,14 @@ class enrol_pagseguro_external extends external_api {
      *
      * @return string $sessionToken
      */
-    public static function get_session() {
+    public static function get_session($couponcode) {
         global $USER;
+        
+        $params = self::validate_parameters(self::get_session_parameters(),
+            array(
+                'couponcode' => $couponcode,
+            )
+        );
 
         $psemail = get_config('enrol_pagseguro', 'pagsegurobusiness');
         $pstoken = get_config('enrol_pagseguro', 'pagsegurotoken');
@@ -71,6 +79,7 @@ class enrol_pagseguro_external extends external_api {
         $rtn = array();
 
         $rtn['stoken'] = $resultxml->id->__toString();
+        $rtn['couponcode'] = $params['couponcode'];
 
         return $rtn;
     }
@@ -86,6 +95,7 @@ class enrol_pagseguro_external extends external_api {
         return new external_single_structure(
             array(
                 'stoken' => new external_value(PARAM_TEXT, 'PagSeguro Session Token'),
+                'couponcode' => new external_value(PARAM_TEXT, 'Discount Coupon Code'),
             )
         );
     }
@@ -99,6 +109,7 @@ class enrol_pagseguro_external extends external_api {
             array(
                 'sessionId' => new external_value(PARAM_TEXT, 'Session ID from Pagseguro'),
                 'courseId' => new external_value(PARAM_TEXT, 'Course ID that is being bought'),
+                'couponcode' => new external_value(PARAM_TEXT, 'Discount Coupon Code'),
             )
         );
     }
@@ -111,13 +122,14 @@ class enrol_pagseguro_external extends external_api {
      * @param string $courseid
      * @return string $sessionToken
      */
-    public static function get_forms($sessionid, $courseid) {
+    public static function get_forms($sessionid, $courseid, $couponcode) {
         global $PAGE;
 
         $params = self::validate_parameters(self::get_forms_parameters(),
             array(
                 'sessionId' => $sessionid,
                 'courseId' => $courseid,
+                'couponcode' => $couponcode,
             )
         );
 
