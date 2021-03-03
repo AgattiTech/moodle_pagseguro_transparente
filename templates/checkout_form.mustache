@@ -165,6 +165,7 @@
 			<input type="hidden" name="pay_method" value="cc">
 			<input type="hidden" name="cc_token" id="cc_token" value="">
 			<input type="hidden" name="courseid" id="cc_courseid" value="">
+			<input type="hidden" name="cc_couponcode" id="cc_couponcode" value="{{ couponcode }}">
 			<input type="hidden" name="inst_val" id="cc_instval" value="">
 		</form>
 		
@@ -203,6 +204,7 @@
 			</div>
 			<input type="hidden" name="pay_method" value="boleto">
 			<input type="hidden" name="sender_hash" value="">
+			<input type="hidden" name="boleto_couponcode" id="boleto_couponcode" value="{{ couponcode }}">
 			<input id="boleto_courseid" type="hidden" name="courseid" value="">
 		</form>
 	</div>

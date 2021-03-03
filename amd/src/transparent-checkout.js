@@ -29,15 +29,15 @@ var ghash = '';
 require(['jquery'], function($){
 
     $("#pagseguro-payment-btn").on('click', function(){
-        var couponcode = this.data('coupon-code');
+        var couponcode = $("#pagseguro-payment-btn").data('coupon-code');
         require(['core/ajax'], function(ajax) {
             var promises = ajax.call([{
                 methodname: 'enrol_pagseguro_get_session',
-                args: {'couponcode': couponcode }
+                args: { }
             }]);
             promises[0].done(function(response) {
                 var urlParams = new URLSearchParams(window.location.search);
-                setPagueSeguroWSSessionId(response.stoken, urlParams.get('id'), response.couponcode);
+                setPagueSeguroWSSessionId(response.stoken, urlParams.get('id'), couponcode);
             }).fail(function() {
                 // Do something with the exception.
             });
@@ -71,8 +71,9 @@ require(['jquery'], function($){
                     $("#cc_instval").val($("#installments").find(':selected').data('installment-value'));
                     $("#pagseguro_cc_form").submit();
                 },
-                error: function() {
+                error: function(response) {
                     // Callback para chamadas que falharam.
+                    console.log("Response failed:" + JSON.stringify(response));
                 },
                 complete: function() {
                     // Callback para todas chamadas.
@@ -121,13 +122,14 @@ require(['jquery'], function($){
     });
 });
 
-function setPagueSeguroWSSessionId(sessionId,courseId, couponcode){
+function setPagueSeguroWSSessionId(sessionId, courseId, couponcode){
     PagSeguroDirectPayment.setSessionId(sessionId);
     PagSeguroDirectPayment.getPaymentMethods({
         success: function() {
             // Retorna os meios de pagamento disponíveis.
             require(['jquery', 'core/ajax', 'core/templates', 'core/notification'],
             function($, ajax, templates, notification) {
+                console.log("reached second ajax call");
                 var promises = ajax.call([{
                     methodname: 'enrol_pagseguro_get_forms',
                     args:{ 'sessionId' : sessionId, 'courseId': courseId, 'couponcode': couponcode }
@@ -137,6 +139,7 @@ function setPagueSeguroWSSessionId(sessionId,courseId, couponcode){
                         $('#modal-return').html(html);
                         templates.runTemplateJS(js);
                         PagSeguroDirectPayment.onSenderHashReady(function(response){
+                            console.log("Response received" + JSON.stringify(response));
                             if(response.status == 'error') {
                                 return false;
                             }
@@ -146,8 +149,9 @@ function setPagueSeguroWSSessionId(sessionId,courseId, couponcode){
                         });
                     }).fail(notification.exception);
 
-                }).fail(function() {
+                }).fail(function(response) {
                     // Do something with the exception.
+                    console.log("Response Failed: " + JSON.stringify(response));
                 });
             });
         },

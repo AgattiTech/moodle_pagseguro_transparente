@@ -40,9 +40,7 @@ class enrol_pagseguro_external extends external_api {
      * @return external_function_parameters
      */
     public static function get_session_parameters() {
-        return new external_function_parameters(array(
-            'couponcode' => new external_value(PARAM_TEXT, 'Discount Coupon Code'),
-        ));
+        return new external_function_parameters(array());
     }
 
     /**
@@ -50,14 +48,8 @@ class enrol_pagseguro_external extends external_api {
      *
      * @return string $sessionToken
      */
-    public static function get_session($couponcode) {
+    public static function get_session() {
         global $USER;
-        
-        $params = self::validate_parameters(self::get_session_parameters(),
-            array(
-                'couponcode' => $couponcode,
-            )
-        );
 
         $psemail = get_config('enrol_pagseguro', 'pagsegurobusiness');
         $pstoken = get_config('enrol_pagseguro', 'pagsegurotoken');
@@ -79,7 +71,6 @@ class enrol_pagseguro_external extends external_api {
         $rtn = array();
 
         $rtn['stoken'] = $resultxml->id->__toString();
-        $rtn['couponcode'] = $params['couponcode'];
 
         return $rtn;
     }
@@ -95,7 +86,6 @@ class enrol_pagseguro_external extends external_api {
         return new external_single_structure(
             array(
                 'stoken' => new external_value(PARAM_TEXT, 'PagSeguro Session Token'),
-                'couponcode' => new external_value(PARAM_TEXT, 'Discount Coupon Code'),
             )
         );
     }

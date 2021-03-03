@@ -25,12 +25,14 @@ namespace enrol_pagseguro\output;
 
 defined('MOODLE_INTERNAL') || die;
 
+
 require_once("$CFG->dirroot/webservice/externallib.php");
 
 use renderable;
 use templatable;
 use renderer_base;
 use stdClass;
+use external_api;
 
 /**
  * Class containing data for pagseguro modal form
@@ -65,7 +67,7 @@ class checkout_form implements renderable, templatable {
 
         $data = array();
         
-        //TODO: treat couponcode here and return with discounted code ;)
+        $coupon = $this->check_discount_code($this->formparams['couponcode'], $this->formparams['courseId']);
         
         $data["courseid"] = $this->formparams['courseId'];
         $course_enrol = $DB->get_record("enrol", array('enrol' => 'pagseguro', 'courseid' => $this->formparams['courseId'] ));
@@ -79,7 +81,33 @@ class checkout_form implements renderable, templatable {
         }
         $data["dt"] = userdate(time()) . ' ' . rand();
         $data["cost"] = $course_enrol->cost;
+        if(!empty($coupon)) {
+            $data['couponcode'] = $coupon['data']['couponcode'];
+            $data['coupontype'] = $coupon['data']['coupontype'];
+            $data['couponvalue'] = $coupon['data']['coupondiscount'];
+            if($coupon->type == 'value'){
+                $data['liqdiscount'] = $data['couponvalue'];
+            } else {
+                $data['liqdiscount'] = ($data['couponvalue']/100)*$data['cost'];
+            }
+            $data["cost"] = $course_enrol->cost - $data['liqdiscount'];
+        }
         $dataobj = json_encode($data);
         return $dataobj;
     }
+    
+    private function check_discount_code($couponcode, $courseid){
+        if (!empty($couponcode)) {
+            $args = array('couponcode' => $couponcode, 'courseid' => $courseid );
+            if (external_api::call_external_function('enrol_coupon_validate_coupon', $args)) {
+                $args = array('couponcode' => $couponcode);
+                return external_api::call_external_function('enrol_coupon_get_coupon_by_code', $args);
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
 }

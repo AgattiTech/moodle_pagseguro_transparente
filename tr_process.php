@@ -31,10 +31,12 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-// @codingStandardsIgnoreLine
 require('../../config.php');
 require_once("lib.php");
 require_once($CFG->libdir.'/enrollib.php');
+require_once($CFG->libdir.'/externallib.php');
+
+require_login();
 
 header("access-control-allow-origin: https://sandbox.pagseguro.uol.com.br");
 
@@ -79,6 +81,8 @@ if ($paymentmethod == 'cc') {
     $params['courseid'] = $courseid;
     $params['instanceid'] = $plugininstance->id;
 
+    $params['couponcode'] = optional_param('cc_couponcode', '', PARAM_RAW);
+
     // Continue building array of parameters from the form.
     $params['name'] = optional_param('ccholdername', '', PARAM_RAW);
     $params['email'] = optional_param('senderemail', '', PARAM_RAW);
@@ -86,8 +90,9 @@ if ($paymentmethod == 'cc') {
     $params['phone_number'] = trim(preg_replace("(\D)", "", substr($wholephone, 5)));
     $params['doc_number'] = preg_replace("(\D)", "", optional_param('sendercpfcnpj', '', PARAM_RAW));
     $params['doc_type'] = strlen($params['doc_number']) == 14 ? 'CNPJ' : 'CPF';
+    // $params['birthday'] = optional_param('birthday', '', PARAM_RAW);
     $params['currency'] = 'BRL';
-    $params['notification_url'] = new moodle_url('/enrol/pagseguro/tr_process.php');
+    $params['notification_url'] = new moodle_url('/enrol/pagseguro/tr_notification.php');
     $params['item_desc'] = empty($course->fullname) ? 'Curso moodle' : mb_substr($course->fullname, 0, 100);
     $params['item_amount'] = number_format($plugininstance->cost, 2);
     $params['item_amount'] = str_replace(',', '', $params['item_amount']);
@@ -121,6 +126,8 @@ if ($paymentmethod == 'boleto') {
     $params['courseid'] = $courseid;
     $params['instanceid'] = $plugininstance->id;
 
+    $params['couponcode'] = optional_param('boleto_couponcode', '', PARAM_RAW);
+
     $params['name'] = optional_param('sendername', '', PARAM_RAW);
     $params['email'] = optional_param('senderemail', '', PARAM_RAW);
     $params['phone_area'] = substr($wholephone, 1, 2);
@@ -128,7 +135,7 @@ if ($paymentmethod == 'boleto') {
     $params['doc_number'] = preg_replace("(\D)", "", optional_param('sendercpfcnpj', '', PARAM_RAW));
     $params['doc_type'] = strlen($params['doc_number']) == 14 ? 'CNPJ' : 'CPF';
     $params['currency'] = 'BRL';
-    $params['notification_url'] = new moodle_url('/enrol/pagseguro/tr_process.php');
+    $params['notification_url'] = new moodle_url('/enrol/pagseguro/tr_notification.php');
     $params['item_desc'] = empty($course->fullname) ? 'Curso moodle' : mb_substr($course->fullname, 0, 100);
     $params['item_amount'] = number_format($plugininstance->cost, 2);
     $params['item_amount'] = str_replace(',', '', $params['item_amount']);
@@ -156,6 +163,8 @@ if (!empty($notificationcode) && $notificationtype == 'transaction') {
 function pagseguro_transparent_cc_checkout($params, $email, $token, $baseurl) {
 
     // First we insert the order into the database, so the customer's info isn't lost.
+    $extraamount = pagseguro_transparent_checkcoupon($params);
+    $params['extraamount'] = number_format($extraamount, 2);
     $refid = pagseguro_transparent_insertorder($params, $email, $token);
     $params['reference'] = $refid;
 
@@ -197,12 +206,22 @@ function pagseguro_transparent_cc_checkout($params, $email, $token, $baseurl) {
 function pagseguro_transparent_boletocheckout($params, $email, $token, $baseurl) {
 
     // First we insert the order into the database, so the customer's info isn't lost.
+    $extraamount = pagseguro_transparent_checkcoupon($params);
+    
+    $myfile = fopen("/var/www/moodle/enrol/pagseguro/log.txt", "w") or die("Unable to open file!");
+    $txt = var_export($extraamount, true);
+    fwrite($myfile, $txt);
+    fclose($myfile);
+    
+    $params['extraamount'] = number_format($extraamount, 2);
     $refid = pagseguro_transparent_insertorder($params, $email, $token);
     $params['reference'] = $refid;
 
     $reqxml = pagseguro_transparent_boletoxml($params);
 
     $url = $baseurl."/v2/transactions?email={$email}&token={$token}";
+    
+    
 
     $data = pagseguro_transparent_sendpaymentdetails($reqxml, $url);
 
@@ -257,6 +276,33 @@ function pagseguro_transparent_notificationrequest($notificationcode, $email, $t
 
 }
 
+function pagseguro_transparent_checkcoupon($params) {
+    if (!empty($params['couponcode'])) {
+//        $context = context_course::instance($params['courseid']);
+//        external_api::validate_context($context);
+        $args = array('couponcode' => $params['couponcode'], 'courseid' => $params['courseid'] );
+        if (external_api::call_external_function('enrol_coupon_validate_coupon', $args)) {
+            $args = array('couponcode' => $params['couponcode']);
+            $coupon = external_api::call_external_function('enrol_coupon_get_coupon_by_code', $args);
+            $couponvalue = $coupon['data']['coupondiscount'];
+            $myfile = fopen("/var/www/moodle/enrol/pagseguro/log_coupon.txt", "w") or die("Unable to open file!");
+            $txt = var_export($coupon, true);
+            fwrite($myfile, $txt);
+            fclose($myfile);
+            if ($coupon['data']['coupontype'] == 'value') {
+                $extraamount = -1 * $couponvalue;
+            } else {
+                $extraamount = -1 * (($couponvalue / 100) * $params['item_amount']);
+            }
+            return $extraamount;
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+}
+
 /**
  * Sends payment details with an XML string to a URL using the curl request system.
  *
@@ -304,6 +350,7 @@ function pagseguro_transparent_insertorder($params, $email, $token) {
     $rec->userid = $USER->id;
     $rec->instanceid = $params['instanceid'];
     $rec->date = date("Y-m-d");
+    $rec->discountedamount = $params['extraamount'];
     $rec->payment_status = COMMERCE_PAYMENT_STATUS_PENDING;
 
     return $DB->insert_record("enrol_pagseguro", $rec);
@@ -479,7 +526,7 @@ function pagseguro_transparent_boletoxml($params) {
                         <quantity>".$params['item_qty']."</quantity>
                     </item>
                 </items>
-                <extraAmount>0.00</extraAmount>
+                <extraAmount>".$params['extraamount']."</extraAmount>
                 <reference>".$params['reference']."</reference>
                 <shipping>
                     <addressRequired>false</addressRequired>
@@ -523,7 +570,7 @@ function pagseguro_transparent_ccxml($params) {
                     <quantity>".$params['item_qty']."</quantity>
                 </item>
             </items>
-            <extraAmount>0.00</extraAmount>
+            <extraAmount>".$params['extraamount']."</extraAmount>
             <reference>".$params['reference']."</reference>
             <shipping>
                 <addressRequired>false</addressRequired>
@@ -542,7 +589,7 @@ function pagseguro_transparent_ccxml($params) {
                             <value>".$params['doc_number']."</value>
                         </document>
                     </documents>
-                    <birthDate>".$params['birthday']."</birthDate>
+                    <birthDate></birthDate>
                     <phone>
                         <areaCode>".$params['phone_area']."</areaCode>
                         <number>".$params['phone_number']."</number>
