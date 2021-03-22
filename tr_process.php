@@ -208,11 +208,6 @@ function pagseguro_transparent_boletocheckout($params, $email, $token, $baseurl)
     // First we insert the order into the database, so the customer's info isn't lost.
     $extraamount = pagseguro_transparent_checkcoupon($params);
     
-    $myfile = fopen("/var/www/moodle/enrol/pagseguro/log.txt", "w") or die("Unable to open file!");
-    $txt = var_export($extraamount, true);
-    fwrite($myfile, $txt);
-    fclose($myfile);
-    
     $params['extraamount'] = number_format($extraamount, 2);
     $refid = pagseguro_transparent_insertorder($params, $email, $token);
     $params['reference'] = $refid;
@@ -393,44 +388,56 @@ function pagseguro_transparent_updateorder($params, $email, $token) {
 function pagseguro_transparent_handletransactionresponse($data) {
 
     global $DB;
+    $myfile = fopen("/var/www/moodle/enrol/pagseguro/log.txt", "w") or die("Unable to open file!");
+    $txt = var_export($data, true);
+    fwrite($myfile, $txt);
+    fclose($myfile);
+    
+    try{
+        $rec = new stdClass();
+        $rec->id = $data->reference->__toString();
+        $rec->code = $data->code->__toString();
+        $rec->type = $data->type->__toString();
+        $rec->status = intval($data->status->__toString());
+        $rec->paymentmethod_type = $data->paymentMethod->type->__toString();
+        $rec->paymentmethod_code = $data->paymentMethod->code->__toString();
+        $rec->grossamount = number_format($data->grossAmount->__toString(), 2);
+        $rec->discountedamount = $data->discountAmount->__toString();
 
-    $rec = new stdClass();
-    $rec->id = $data->reference->__toString();
-    $rec->code = $data->code->__toString();
-    $rec->type = $data->type->__toString();
-    $rec->status = intval($data->status->__toString());
-    $rec->paymentmethod_type = $data->paymentMethod->type->__toString();
-    $rec->paymentmethod_code = $data->paymentMethod->code->__toString();
-    $rec->grossamount = number_format($data->grossAmount->__toString(), 2);
-    $rec->discountedamount = $data->discountAmount->__toString();
+        switch($rec->status){
+            case COMMERCE_PAGSEGURO_STATUS_AWAITING:
+            case COMMERCE_PAGSEGURO_STATUS_IN_ANALYSIS:
+                $rec->payment_status = COMMERCE_PAYMENT_STATUS_PENDING;
+                break;
+            case COMMERCE_PAGSEGURO_STATUS_PAID:
+            case COMMERCE_PAGSEGURO_STATUS_AVAILABLE:
+                $rec->payment_status = COMMERCE_PAYMENT_STATUS_SUCCESS;
+                break;
+            case COMMERCE_PAGSEGURO_STATUS_DISPUTED:
+            case COMMERCE_PAGSEGURO_STATUS_REFUNDED:
+            case COMMERCE_PAGSEGURO_STATUS_CANCELED:
+            case COMMERCE_PAGSEGURO_STATUS_DEBITED:
+            case COMMERCE_PAGSEGURO_STATUS_WITHHELD:
+                $rec->payment_status = COMMERCE_PAYMENT_STATUS_FAILURE;
+                break;
 
-    switch($rec->status){
-        case COMMERCE_PAGSEGURO_STATUS_AWAITING:
-        case COMMERCE_PAGSEGURO_STATUS_IN_ANALYSIS:
-            $rec->payment_status = COMMERCE_PAYMENT_STATUS_PENDING;
-            break;
-        case COMMERCE_PAGSEGURO_STATUS_PAID:
-        case COMMERCE_PAGSEGURO_STATUS_AVAILABLE:
-            $rec->payment_status = COMMERCE_PAYMENT_STATUS_SUCCESS;
-            break;
-        case COMMERCE_PAGSEGURO_STATUS_DISPUTED:
-        case COMMERCE_PAGSEGURO_STATUS_REFUNDED:
-        case COMMERCE_PAGSEGURO_STATUS_CANCELED:
-        case COMMERCE_PAGSEGURO_STATUS_DEBITED:
-        case COMMERCE_PAGSEGURO_STATUS_WITHHELD:
-            $rec->payment_status = COMMERCE_PAYMENT_STATUS_FAILURE;
-            break;
+        }
 
+        $DB->update_record("enrol_pagseguro", $rec);
+
+        $record = $DB->get_record("enrol_pagseguro", ['id' => $rec->id]);
+        if ($record->payment_status == COMMERCE_PAYMENT_STATUS_SUCCESS) {
+            enrol_pagseguro_coursepaidevent($record);
+        }
+
+        return $record;
     }
-
-    $DB->update_record("enrol_pagseguro", $rec);
-
-    $record = $DB->get_record("enrol_pagseguro", ['id' => $rec->id]);
-    if ($record->payment_status == COMMERCE_PAYMENT_STATUS_SUCCESS) {
-        enrol_pagseguro_coursepaidevent($record);
+    catch(Exception $e){
+        $exceptionparam = new stdClass();
+        $exceptionparam->message = $e->getMessage();
+        $exceptionparam->message .= $data;
+        throw new moodle_exception($e->getMessage() . $data);
     }
-
-    return $record;
 
 }
 
